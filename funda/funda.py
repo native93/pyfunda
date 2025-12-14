@@ -303,7 +303,14 @@ class Funda:
             "has_solar_panels": ads.get("zonnepanelen") == "true",
             "has_heat_pump": ads.get("warmtepomp") == "true",
             "has_roof_terrace": ads.get("dakterras") == "true",
+            "has_parking_on_site": ads.get("parkeergelegenheidopeigenterrein") == "true",
+            "has_parking_enclosed": ads.get("parkeergelegenheidopafgeslotenterrein") == "true",
             "open_house": ads.get("openhuis") == "true",
+            "is_auction": price_data.get("IsAuction", False),
+            "is_energy_efficient": ads.get("energiezuinig") == "true",
+            "is_monument": ads.get("monumentalestatus") == "true",
+            "is_fixer_upper": ads.get("kluswoning") == "true",
+            "house_type": ads.get("soortwoning"),
             # URLs
             "google_maps_url": data.get("GoogleMapsObjectUrl"),
             "share_url": data.get("Share", {}).get("Url"),
@@ -316,19 +323,36 @@ class Funda:
             listing_data["longitude"] = float(coords["Longitude"])
             listing_data["coordinates"] = (listing_data["latitude"], listing_data["longitude"])
 
-        # Photos
-        photos = media.get("Photos", {}).get("Items", [])
-        listing_data["photos"] = [p.get("Id") for p in photos if p.get("Id")]
+        # Photos - IDs and full URLs
+        photos_data = media.get("Photos", {})
+        photo_base = photos_data.get("MediaBaseUrl", "").replace("{id}", "{}")
+        photo_items = photos_data.get("Items", [])
+        listing_data["photos"] = [p.get("Id") for p in photo_items if p.get("Id")]
+        listing_data["photo_urls"] = [photo_base.format(p["Id"]) for p in photo_items if p.get("Id")] if photo_base else []
         listing_data["photo_count"] = len(listing_data["photos"])
 
         # Floorplans
-        floorplans = media.get("LegacyFloorPlan", {}).get("Items", [])
-        listing_data["floorplans"] = [f.get("Id") for f in floorplans if f.get("Id")]
+        floorplans_data = media.get("LegacyFloorPlan", {})
+        floorplan_base = floorplans_data.get("MediaBaseUrl", "").replace("{index}", "{}")
+        floorplan_items = floorplans_data.get("Items", [])
+        listing_data["floorplans"] = [f.get("Id") for f in floorplan_items if f.get("Id")]
+        listing_data["floorplan_urls"] = [floorplan_base.format(i) for i in range(len(floorplan_items))] if floorplan_base else []
 
         # Videos
-        videos = media.get("Videos", {})
-        video_items = videos.get("Items", [])
+        videos_data = media.get("Videos", {})
+        video_base = videos_data.get("MediaBaseUrl", "").replace("{id}", "{}")
+        video_items = videos_data.get("Items", [])
         listing_data["videos"] = [v.get("Id") for v in video_items if v.get("Id")]
+        listing_data["video_urls"] = [video_base.format(v["Id"]) for v in video_items if v.get("Id")] if video_base else []
+
+        # 360 Photos
+        photos360_data = media.get("LegacyPhotos360", {})
+        photos360_base = photos360_data.get("ThumbnailBaseUrl", "").replace("{id}", "{}")
+        photos360_items = photos360_data.get("Items", [])
+        listing_data["photos_360"] = [
+            {"name": p.get("DisplayName"), "id": p.get("Id"), "url": photos360_base.format(p["Id"]) if photos360_base else None}
+            for p in photos360_items if p.get("Id")
+        ]
 
         # URL
         city_slug = address.get("City", "").lower().replace(" ", "-")
@@ -344,6 +368,11 @@ class Funda:
                 if item.get("Label") and item.get("Value"):
                     characteristics[item["Label"]] = item["Value"]
         listing_data["characteristics"] = characteristics
+
+        # Extract specific fields from characteristics
+        listing_data["offered_since"] = characteristics.get("Aangeboden sinds")
+        listing_data["acceptance"] = characteristics.get("Aanvaarding")
+        listing_data["price_per_m2"] = characteristics.get("Vraagprijs per m²")
 
         # Broker
         tracking = data.get("Tracking", {}).get("Values", {})
