@@ -289,6 +289,7 @@ class Funda:
             "plot_area": fast_view.get("PlotArea"),
             "bedrooms": fast_view.get("NumberOfBedrooms"),
             "description": data.get("ListingDescription", {}).get("Description"),
+            "publication_date": data.get("PublicationDate"),
         }
 
         # Coordinates
