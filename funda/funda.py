@@ -268,6 +268,7 @@ class Funda:
         coords = data.get("Coordinates", {})
         media = data.get("Media", {})
         fast_view = data.get("FastView", {})
+        ads = data.get("Advertising", {}).get("TargetingOptions", {})
 
         # Build listing data
         listing_data = {
@@ -278,6 +279,9 @@ class Funda:
             "postcode": address.get("PostCode"),
             "province": address.get("Province"),
             "neighbourhood": address.get("NeighborhoodName"),
+            "house_number": address.get("HouseNumber"),
+            "house_number_ext": address.get("HouseNumberExtension"),
+            "municipality": ads.get("gemeente"),
             "price": price_data.get("NumericSellingPrice") or price_data.get("NumericRentalPrice"),
             "price_formatted": price_data.get("SellingPrice") or price_data.get("RentalPrice"),
             "offering_type": data.get("OfferingType"),
@@ -288,8 +292,22 @@ class Funda:
             "living_area": fast_view.get("LivingArea"),
             "plot_area": fast_view.get("PlotArea"),
             "bedrooms": fast_view.get("NumberOfBedrooms"),
+            "rooms": int(ads["aantalkamers"]) if ads.get("aantalkamers") else None,
+            "construction_year": int(ads["bouwjaar"]) if ads.get("bouwjaar") else None,
             "description": data.get("ListingDescription", {}).get("Description"),
+            "highlight": data.get("Promo", {}).get("Blikvanger", {}).get("Text"),
             "publication_date": data.get("PublicationDate"),
+            # Booleans
+            "has_garden": ads.get("tuin") == "true",
+            "has_balcony": ads.get("balkon") == "true",
+            "has_solar_panels": ads.get("zonnepanelen") == "true",
+            "has_heat_pump": ads.get("warmtepomp") == "true",
+            "has_roof_terrace": ads.get("dakterras") == "true",
+            "open_house": ads.get("openhuis") == "true",
+            # URLs
+            "google_maps_url": data.get("GoogleMapsObjectUrl"),
+            "share_url": data.get("Share", {}).get("Url"),
+            "brochure_url": media.get("Brochure", {}).get("CdnUrl"),
         }
 
         # Coordinates
