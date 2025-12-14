@@ -147,7 +147,8 @@ class Funda:
             object_type: Property types (e.g. ["house", "apartment"])
             energy_label: Energy labels (e.g. ["A", "A+", "A++"])
             radius_km: Search radius in km (use with single location/postcode)
-            sort: Sort order ("newest", "area_desc", "area_asc", or None for relevance)
+            sort: Sort order - "newest", "oldest", "price_asc", "price_desc",
+                  "area_asc", "area_desc", "plot_desc", "city", "postcode", or None
             page: Page number (0-indexed, 15 results per page)
 
         Returns:
@@ -176,12 +177,20 @@ class Funda:
         }
 
         # Sort
-        if sort == "newest":
-            params["sort"] = {"field": "publish_date_utc", "order": "desc"}
-        elif sort == "area_desc":
-            params["sort"] = {"field": "floor_area", "order": "desc"}
-        elif sort == "area_asc":
-            params["sort"] = {"field": "floor_area", "order": "asc"}
+        sort_map = {
+            "newest": ("publish_date_utc", "desc"),
+            "oldest": ("publish_date_utc", "asc"),
+            "price_asc": ("price.selling_price", "asc"),
+            "price_desc": ("price.selling_price", "desc"),
+            "area_asc": ("floor_area", "asc"),
+            "area_desc": ("floor_area", "desc"),
+            "plot_desc": ("plot_area", "desc"),
+            "city": ("address.city", "asc"),
+            "postcode": ("address.postal_code", "asc"),
+        }
+        if sort and sort in sort_map:
+            field, order = sort_map[sort]
+            params["sort"] = {"field": field, "order": order}
         else:
             params["sort"] = {"field": None, "order": None}
 
