@@ -125,19 +125,29 @@ class Funda:
         price_max: int | None = None,
         area_min: int | None = None,
         area_max: int | None = None,
+        plot_min: int | None = None,
+        plot_max: int | None = None,
         object_type: list[str] | None = None,
+        energy_label: list[str] | None = None,
+        radius_km: int | None = None,
+        sort: str | None = None,
         page: int = 0,
     ) -> list[Listing]:
         """Search for listings.
 
         Args:
-            location: City/area name(s) to search in
+            location: City/area name(s) or postcode to search in
             offering_type: "buy" or "rent"
             price_min: Minimum price
             price_max: Maximum price
             area_min: Minimum living area in m²
             area_max: Maximum living area in m²
+            plot_min: Minimum plot area in m²
+            plot_max: Maximum plot area in m²
             object_type: Property types (e.g. ["house", "apartment"])
+            energy_label: Energy labels (e.g. ["A", "A+", "A++"])
+            radius_km: Search radius in km (use with single location/postcode)
+            sort: Sort order ("newest", "area_desc", "area_asc", or None for relevance)
             page: Page number (0-indexed, 15 results per page)
 
         Returns:
@@ -145,7 +155,7 @@ class Funda:
 
         Example:
             >>> f.search_listing('amsterdam', price_max=500000)
-            >>> f.search_listing(['amsterdam', 'rotterdam'], offering_type='rent')
+            >>> f.search_listing('1012AB', radius_km=30, price_max=1250000, energy_label=['A', 'A+'])
         """
         import json
 
@@ -163,29 +173,61 @@ class Funda:
             "publication_date": {"no_preference": True},
             "offering_type": offering_type,
             "page": {"from": page * 15},
-            "sort": {"field": None, "order": None},
         }
 
-        if locations:
+        # Sort
+        if sort == "newest":
+            params["sort"] = {"field": "publish_date_utc", "order": "desc"}
+        elif sort == "area_desc":
+            params["sort"] = {"field": "floor_area", "order": "desc"}
+        elif sort == "area_asc":
+            params["sort"] = {"field": "floor_area", "order": "asc"}
+        else:
+            params["sort"] = {"field": None, "order": None}
+
+        # Location - either radius search or selected_area
+        if locations and radius_km and len(locations) == 1:
+            # Radius search from postcode or city
+            loc_id = locations[0].lower().replace(" ", "-") + "-0"
+            params["radius_search"] = {
+                "index": "geo-wonen-alias-prod",
+                "id": loc_id,
+                "path": f"area_with_radius.{radius_km}",
+            }
+        elif locations:
             params["selected_area"] = locations
 
         # Price filter - format depends on offering type
         if price_min is not None or price_max is not None:
             price_key = "selling_price" if offering_type == "buy" else "rent_price"
-            price_filter: dict[str, int] = {}
+            price_filter: dict[str, Any] = {}
             if price_min:
                 price_filter["from"] = price_min
             if price_max:
                 price_filter["to"] = price_max
             params["price"] = {price_key: price_filter}
 
+        # Living area filter
         if area_min is not None or area_max is not None:
-            floor_filter: dict[str, int] = {}
+            floor_filter: dict[str, Any] = {}
             if area_min:
                 floor_filter["from"] = area_min
             if area_max:
                 floor_filter["to"] = area_max
             params["floor_area"] = floor_filter
+
+        # Plot area filter
+        if plot_min is not None or plot_max is not None:
+            plot_filter: dict[str, Any] = {}
+            if plot_min:
+                plot_filter["from"] = plot_min
+            if plot_max:
+                plot_filter["to"] = plot_max
+            params["plot_area"] = plot_filter
+
+        # Energy label filter
+        if energy_label:
+            params["energy_label"] = energy_label
 
         # Build NDJSON query
         index_line = json.dumps({"index": "listings-wonen-searcher-alias-prod"})
@@ -325,6 +367,7 @@ class Funda:
                 "neighbourhood": address.get("neighbourhood"),
                 "price": price,
                 "living_area": source.get("floor_area", [None])[0] if source.get("floor_area") else None,
+                "plot_area": source.get("plot_area_range", {}).get("gte"),
                 "bedrooms": source.get("number_of_bedrooms"),
                 "energy_label": source.get("energy_label"),
                 "object_type": source.get("object_type"),
