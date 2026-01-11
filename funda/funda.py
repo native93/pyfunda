@@ -28,6 +28,17 @@ SEARCH_HEADERS = {
 }
 
 
+def _parse_area(value: str | None) -> int | None:
+    """Parse area string like '200 m²' or '2.960 m²' to integer."""
+    if not value:  # handles None and ''
+        return None
+    if isinstance(value, (int, float)):
+        return int(value)
+    # Remove ' m²' suffix and '.' thousand separator (Dutch locale)
+    cleaned = value.replace(' m²', '').replace('.', '')
+    return int(cleaned) if cleaned.isdigit() else None
+
+
 class Funda:
     """Main interface to Funda API.
 
@@ -292,8 +303,10 @@ class Funda:
             "construction_type": data.get("ConstructionType"),
             "status": "sold" if data.get("IsSoldOrRented") else "available",
             "energy_label": fast_view.get("EnergyLabel"),
-            "living_area": fast_view.get("LivingArea"),
-            "plot_area": fast_view.get("PlotArea"),
+            "living_area": int(ads["woonoppervlakte"]) if ads.get("woonoppervlakte", "").isdigit() else _parse_area(fast_view.get("LivingArea")),
+            "living_area_formatted": fast_view.get("LivingArea"),
+            "plot_area": int(ads["perceeloppervlakte"]) if ads.get("perceeloppervlakte", "").isdigit() else _parse_area(fast_view.get("PlotArea")),
+            "plot_area_formatted": fast_view.get("PlotArea"),
             "bedrooms": fast_view.get("NumberOfBedrooms"),
             "rooms": int(ads["aantalkamers"]) if ads.get("aantalkamers") else None,
             "construction_year": int(ads["bouwjaar"]) if ads.get("bouwjaar") and ads["bouwjaar"].isdigit() else None,
@@ -336,10 +349,13 @@ class Funda:
 
         # Floorplans
         floorplans_data = media.get("LegacyFloorPlan", {})
-        floorplan_base = floorplans_data.get("MediaBaseUrl", "").replace("{index}", "{}")
+        floorplan_base = floorplans_data.get("ThumbnailBaseUrl", "").replace("{id}", "{}")
         floorplan_items = floorplans_data.get("Items", [])
         listing_data["floorplans"] = [f.get("Id") for f in floorplan_items if f.get("Id")]
-        listing_data["floorplan_urls"] = [floorplan_base.format(i) for i in range(len(floorplan_items))] if floorplan_base else []
+        listing_data["floorplan_urls"] = [
+            floorplan_base.format(f["ThumbnailId"])
+            for f in floorplan_items if f.get("ThumbnailId")
+        ] if floorplan_base else []
 
         # Videos
         videos_data = media.get("Videos", {})
