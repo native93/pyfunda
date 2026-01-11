@@ -296,7 +296,7 @@ class Funda:
             "plot_area": fast_view.get("PlotArea"),
             "bedrooms": fast_view.get("NumberOfBedrooms"),
             "rooms": int(ads["aantalkamers"]) if ads.get("aantalkamers") else None,
-            "construction_year": int(ads["bouwjaar"]) if ads.get("bouwjaar") else None,
+            "construction_year": int(ads["bouwjaar"]) if ads.get("bouwjaar") and ads["bouwjaar"].isdigit() else None,
             "description": data.get("ListingDescription", {}).get("Description"),
             "highlight": data.get("Promo", {}).get("Blikvanger", {}).get("Text"),
             "publication_date": data.get("PublicationDate"),
