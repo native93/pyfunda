@@ -16,5 +16,5 @@ Example usage:
 from funda.funda import Funda, FundaAPI
 from funda.listing import Listing
 
-__version__ = "2.2.0"
+__version__ = "2.2.1"
 __all__ = ["Funda", "FundaAPI", "Listing", "__version__"]

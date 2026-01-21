@@ -626,18 +626,18 @@ def test_session_lazy_loading():
     print("  Session lazy loading working correctly")
 
 
-@test("Session headers are set correctly")
+@test("Session is created correctly")
 def test_session_headers():
     from funda import Funda
 
     f = Funda()
     session = f.session
 
-    assert 'x-funda-app-platform' in session.headers, "Should have x-funda-app-platform header"
-    assert session.headers['x-funda-app-platform'] == 'android', "Platform should be android"
+    # Session exists (headers are generated per-request with Dart fingerprint)
+    assert session is not None, "Session should exist"
 
     f.close()
-    print("  Session headers set correctly")
+    print("  Session created correctly")
 
 
 @test("Custom timeout is respected")

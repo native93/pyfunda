@@ -1,10 +1,12 @@
 """Main Funda API class."""
 
+import random
 import re
 import time
 from typing import Any
 
 from curl_cffi import requests
+from curl_cffi.const import CurlHttpVersion
 
 from funda.listing import Listing
 
@@ -16,17 +18,47 @@ API_LISTING_TINY = f"{API_BASE}/tinyId/{{tiny_id}}"
 API_SEARCH = "https://listing-search-wonen.funda.io/_msearch/template"
 API_WALTER = "https://api.walterliving.com/hunter/lookup"
 
-# Headers for mobile API
-HEADERS = {
-    "x-funda-app-platform": "android",
-    "content-type": "application/json",
-}
+FUNDA_JA3 = "771,4867-4865-4866-52393-52392-49195-49199-49196-49200-49161-49171-49162-49172-156-157-47-53,0-23-65281-10-11-35-13-51-45-43-21,29-23-24,0"
 
-SEARCH_HEADERS = {
-    "content-type": "application/json",
-    "accept": "application/json",
-    "referer": "https://www.funda.nl/",
-}
+
+
+def _make_headers(host: str, for_search: bool = False) -> list[tuple[str, str]]:
+    """Generate headers matching the Funda Android app."""
+    trace_id = str(random.randint(10**18, 10**19))
+    parent_id = hex(random.randint(10**15, 10**16))[2:]
+    tid = hex(int(time.time()))[2:] + "00000000"
+
+    headers = [
+        ("user-agent", "Dart/3.9 (dart:io)"),
+        ("x-datadog-sampling-priority", "0"),
+        ("x-datadog-origin", "rum"),
+        ("tracestate", f"dd=s:0;o:rum;p:{parent_id}"),
+        ("accept-encoding", "gzip"),
+        ("x-datadog-parent-id", trace_id),
+    ]
+
+    if for_search:
+        # Search endpoint uses referer and accept instead of x-funda-app-platform
+        headers.extend([
+            ("content-type", "application/json"),
+            ("referer", "https://www.funda.nl/"),
+            ("accept", "application/json"),
+        ])
+    else:
+        # Listing endpoint uses x-funda-app-platform
+        headers.extend([
+            ("x-funda-app-platform", "android"),
+            ("content-type", "application/json"),
+        ])
+
+    headers.extend([
+        ("traceparent", f"00-{tid}{trace_id[:16]}-{parent_id}-00"),
+        ("host", host),
+        ("x-datadog-tags", f"_dd.p.tid={tid}"),
+        ("x-datadog-trace-id", trace_id),
+    ])
+
+    return headers
 
 
 def _parse_area(value: str | None) -> int | None:
@@ -69,8 +101,7 @@ class Funda:
     def session(self) -> requests.Session:
         """Lazily create HTTP session."""
         if self._session is None:
-            self._session = requests.Session(impersonate="chrome")
-            self._session.headers.update(HEADERS)
+            self._session = requests.Session()
         return self._session
 
     def close(self) -> None:
@@ -111,17 +142,26 @@ class Funda:
 
         # Try tinyId endpoint first (8-9 digits), then globalId (7 digits)
         listing_id_str = str(listing_id)
+        host = "listing-detail-page.funda.io"
         if len(listing_id_str) >= 8:
             url = API_LISTING_TINY.format(tiny_id=listing_id_str)
         else:
             url = API_LISTING.format(listing_id=listing_id_str)
 
-        response = self.session.get(url, timeout=self.timeout)
+        headers = _make_headers(host)
+        response = self.session.get(
+            url, headers=headers, ja3=FUNDA_JA3,
+            http_version=CurlHttpVersion.V1_1, timeout=self.timeout
+        )
 
         # If tinyId fails, try as globalId
         if response.status_code == 404 and len(listing_id_str) >= 8:
             url = API_LISTING.format(listing_id=listing_id_str)
-            response = self.session.get(url, timeout=self.timeout)
+            headers = _make_headers(host)
+            response = self.session.get(
+                url, headers=headers, ja3=FUNDA_JA3,
+                http_version=CurlHttpVersion.V1_1, timeout=self.timeout
+            )
 
         if response.status_code != 200:
             raise LookupError(f"Listing {listing_id} not found")
@@ -259,11 +299,15 @@ class Funda:
         query = f"{index_line}\n{query_line}\n"
 
         # Retry on intermittent 400 errors from API
+        host = "listing-search-wonen.funda.io"
         for attempt in range(3):
+            headers = _make_headers(host, for_search=True)
             response = self.session.post(
                 API_SEARCH,
-                headers=SEARCH_HEADERS,
+                headers=headers,
                 data=query,
+                ja3=FUNDA_JA3,
+                http_version=CurlHttpVersion.V1_1,
                 timeout=self.timeout,
             )
             if response.status_code == 200:
@@ -458,11 +502,16 @@ class Funda:
         """
         consecutive_404s = 0
         current_id = since_id + 1
+        host = "listing-detail-page.funda.io"
 
         while consecutive_404s < max_consecutive_404s:
             url = API_LISTING.format(listing_id=current_id)
             try:
-                response = self.session.get(url, timeout=self.timeout)
+                headers = _make_headers(host)
+                response = self.session.get(
+                    url, headers=headers, ja3=FUNDA_JA3,
+                    http_version=CurlHttpVersion.V1_1, timeout=self.timeout
+                )
 
                 if response.status_code == 200:
                     consecutive_404s = 0
@@ -536,6 +585,7 @@ class Funda:
             json=payload,
             headers={"Accept": "application/json", "Content-Type": "application/json"},
             timeout=self.timeout,
+            http_version=CurlHttpVersion.V1_1,
         )
 
         if response.status_code != 200:
