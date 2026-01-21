@@ -529,7 +529,7 @@ class Funda:
                 else:
                     consecutive_404s += 1
 
-            except requests.RequestException:
+            except requests.errors.RequestsError:
                 consecutive_404s += 1
 
             current_id += 1
