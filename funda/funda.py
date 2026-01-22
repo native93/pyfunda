@@ -6,7 +6,7 @@ import time
 from typing import Any
 
 from curl_cffi import requests
-from curl_cffi.const import CurlHttpVersion
+import tls_client
 
 from funda.listing import Listing
 
@@ -18,16 +18,44 @@ API_LISTING_TINY = f"{API_BASE}/tinyId/{{tiny_id}}"
 API_SEARCH = "https://listing-search-wonen.funda.io/_msearch/template"
 API_WALTER = "https://api.walterliving.com/hunter/lookup"
 
-FUNDA_JA3 = "771,4867-4865-4866-52393-52392-49195-49199-49196-49200-49161-49171-49162-49172-156-157-47-53,0-23-65281-10-11-35-13-51-45-43-21,29-23-24,0"
+# Funda mobile app JA3 fingerprints (captured from real Dart/Flutter app traffic)
+# JA3 without extension 21 - from favourites.funda.io
+# JA3 hash: 9225d95490794840d9d5f1f94d339285
+FUNDA_JA3 = "771,4867-4865-4866-52393-52392-49195-49199-49196-49200-49161-49171-49162-49172-156-157-47-53,0-23-65281-10-11-35-13-51-45-43,29-23-24,0"
+
+# JA3 with extension 21 (padding) - from cdn-settings.segment.com
+# JA3 hash: 4bf8cdd8919b07d35ca824c20efb3537
+FUNDA_JA3_EXT21 = "771,4867-4865-4866-52393-52392-49195-49199-49196-49200-49161-49171-49162-49172-156-157-47-53,0-23-65281-10-11-35-13-51-45-43-21,29-23-24,0"
+
+# Fingerprint pool - tried in order until one works
+# Types: "tls_ja3", "curl_impersonate", "tls_client"
+FINGERPRINT_POOL = [
+    # tls_client with exact Funda app JA3 fingerprints
+    {"type": "tls_ja3", "ja3": FUNDA_JA3},
+    {"type": "tls_ja3", "ja3": FUNDA_JA3_EXT21},
+    # curl_cffi impersonate fallback - Safari works best with Funda headers
+    {"type": "curl_impersonate", "target": "safari15_5"},
+    {"type": "curl_impersonate", "target": "safari15_3"},
+    # tls_client preset profiles as final fallback
+    {"type": "tls_client", "identifier": "okhttp4_android_13"},
+    {"type": "tls_client", "identifier": "chrome_120"},
+]
+
+# Test endpoint to verify fingerprint works
+TEST_URL = f"{API_BASE}/tinyId/43117443"
 
 
 
-def _make_headers(host: str, for_search: bool = False) -> list[tuple[str, str]]:
-    """Generate headers matching the Funda Android app."""
+def _make_headers(for_search: bool = False) -> list[tuple[str, str]]:
+    """Generate headers matching the Funda Android app exactly.
+
+    Header order and values are captured from real Funda app traffic.
+    """
     trace_id = str(random.randint(10**18, 10**19))
     parent_id = hex(random.randint(10**15, 10**16))[2:]
     tid = hex(int(time.time()))[2:] + "00000000"
 
+    # Base headers in exact order from app traffic
     headers = [
         ("user-agent", "Dart/3.9 (dart:io)"),
         ("x-datadog-sampling-priority", "0"),
@@ -38,25 +66,21 @@ def _make_headers(host: str, for_search: bool = False) -> list[tuple[str, str]]:
     ]
 
     if for_search:
-        # Search endpoint uses referer and accept instead of x-funda-app-platform
+        # Search endpoint: content-type, referer, accept, then traceparent
         headers.extend([
             ("content-type", "application/json"),
             ("referer", "https://www.funda.nl/"),
             ("accept", "application/json"),
         ])
     else:
-        # Listing endpoint uses x-funda-app-platform
+        # Listing endpoint: x-funda-app-platform, content-type, then traceparent
         headers.extend([
             ("x-funda-app-platform", "android"),
             ("content-type", "application/json"),
         ])
 
-    headers.extend([
-        ("traceparent", f"00-{tid}{trace_id[:16]}-{parent_id}-00"),
-        ("host", host),
-        ("x-datadog-tags", f"_dd.p.tid={tid}"),
-        ("x-datadog-trace-id", trace_id),
-    ])
+    # traceparent is always last
+    headers.append(("traceparent", f"00-{tid}{trace_id[:16]}-{parent_id}-00"))
 
     return headers
 
@@ -95,20 +119,145 @@ class Funda:
             timeout: Request timeout in seconds
         """
         self.timeout = timeout
-        self._session: requests.Session | None = None
+        self._curl_session: requests.Session | None = None
+        self._tls_session: tls_client.Session | None = None
+        self._fingerprint: dict | None = None
 
-    @property
-    def session(self) -> requests.Session:
-        """Lazily create HTTP session."""
-        if self._session is None:
-            self._session = requests.Session()
-        return self._session
+    def _make_headers_dict(self, for_search: bool = False) -> dict[str, str]:
+        """Generate headers as dict for tls_client.
+
+        Header order and values match the real Funda Android app exactly.
+        """
+        trace_id = str(random.randint(10**18, 10**19))
+        parent_id = hex(random.randint(10**15, 10**16))[2:]
+        tid = hex(int(time.time()))[2:] + "00000000"
+
+        # Build headers in exact order from app traffic
+        # Python 3.7+ dicts preserve insertion order
+        headers = {
+            "user-agent": "Dart/3.9 (dart:io)",
+            "x-datadog-sampling-priority": "0",
+            "x-datadog-origin": "rum",
+            "tracestate": f"dd=s:0;o:rum;p:{parent_id}",
+            "accept-encoding": "gzip",
+            "x-datadog-parent-id": trace_id,
+        }
+
+        if for_search:
+            # Search endpoint: content-type, referer, accept, then traceparent
+            headers["content-type"] = "application/json"
+            headers["referer"] = "https://www.funda.nl/"
+            headers["accept"] = "application/json"
+        else:
+            # Listing endpoint: x-funda-app-platform, content-type, then traceparent
+            headers["x-funda-app-platform"] = "android"
+            headers["content-type"] = "application/json"
+
+        # traceparent is always last
+        headers["traceparent"] = f"00-{tid}{trace_id[:16]}-{parent_id}-00"
+
+        return headers
+
+    def _test_fingerprint(self, fingerprint: dict) -> bool:
+        """Test if a fingerprint works against Funda API."""
+        try:
+            fp_type = fingerprint["type"]
+            if fp_type == "tls_ja3":
+                # tls_client with custom JA3 - primary method for Funda app fingerprint
+                session = tls_client.Session(ja3_string=fingerprint["ja3"], random_tls_extension_order=False)
+                headers = self._make_headers_dict()
+                response = session.get(TEST_URL, headers=headers, timeout_seconds=5)
+            elif fp_type == "curl_ja3":
+                session = requests.Session()
+                headers = _make_headers()
+                response = session.get(TEST_URL, headers=headers, ja3=fingerprint["ja3"], timeout=5)
+                session.close()
+            elif fp_type == "curl_impersonate":
+                session = requests.Session(impersonate=fingerprint["target"])
+                headers = _make_headers()
+                response = session.get(TEST_URL, headers=headers, timeout=5)
+                session.close()
+            elif fp_type == "tls_client":
+                session = tls_client.Session(client_identifier=fingerprint["identifier"], random_tls_extension_order=False)
+                headers = self._make_headers_dict()
+                response = session.get(TEST_URL, headers=headers, timeout_seconds=5)
+            else:
+                return False
+            return response.status_code == 200
+        except Exception:
+            return False
+
+    def _find_working_fingerprint(self) -> dict:
+        """Find a working fingerprint from the pool."""
+        for fp in FINGERPRINT_POOL:
+            if self._test_fingerprint(fp):
+                return fp
+        raise RuntimeError("No working fingerprint found. Funda may have updated their bot detection.")
+
+    def _ensure_session(self) -> None:
+        """Ensure a working session is created."""
+        if self._fingerprint is None:
+            self._fingerprint = self._find_working_fingerprint()
+
+        fp_type = self._fingerprint["type"]
+        if fp_type == "tls_ja3":
+            # tls_client with custom JA3 - exact Funda app fingerprint
+            if self._tls_session is None:
+                self._tls_session = tls_client.Session(
+                    ja3_string=self._fingerprint["ja3"],
+                    random_tls_extension_order=False
+                )
+        elif fp_type == "curl_ja3":
+            if self._curl_session is None:
+                self._curl_session = requests.Session()
+        elif fp_type == "curl_impersonate":
+            if self._curl_session is None:
+                self._curl_session = requests.Session(impersonate=self._fingerprint["target"])
+        elif fp_type == "tls_client":
+            if self._tls_session is None:
+                self._tls_session = tls_client.Session(
+                    client_identifier=self._fingerprint["identifier"],
+                    random_tls_extension_order=False
+                )
+
+    def _get(self, url: str, headers_list: list[tuple[str, str]]) -> Any:
+        """Make GET request using the active session."""
+        self._ensure_session()
+        fp_type = self._fingerprint["type"]
+
+        if fp_type in ("tls_ja3", "tls_client"):
+            headers = self._make_headers_dict()
+            return self._tls_session.get(url, headers=headers, timeout_seconds=self.timeout)
+        elif fp_type == "curl_ja3":
+            return self._curl_session.get(url, headers=headers_list, ja3=self._fingerprint["ja3"], timeout=self.timeout)
+        else:
+            return self._curl_session.get(url, headers=headers_list, timeout=self.timeout)
+
+    def _post(self, url: str, headers_list: list[tuple[str, str]], data: str = None, json_data: dict = None, for_search: bool = False) -> Any:
+        """Make POST request using the active session."""
+        self._ensure_session()
+        fp_type = self._fingerprint["type"]
+
+        if fp_type in ("tls_ja3", "tls_client"):
+            headers = self._make_headers_dict(for_search=for_search)
+            if json_data:
+                return self._tls_session.post(url, headers=headers, json=json_data, timeout_seconds=self.timeout)
+            return self._tls_session.post(url, headers=headers, data=data, timeout_seconds=self.timeout)
+        elif fp_type == "curl_ja3":
+            if json_data:
+                return self._curl_session.post(url, headers=headers_list, json=json_data, ja3=self._fingerprint["ja3"], timeout=self.timeout)
+            return self._curl_session.post(url, headers=headers_list, data=data, ja3=self._fingerprint["ja3"], timeout=self.timeout)
+        else:
+            if json_data:
+                return self._curl_session.post(url, headers=headers_list, json=json_data, timeout=self.timeout)
+            return self._curl_session.post(url, headers=headers_list, data=data, timeout=self.timeout)
 
     def close(self) -> None:
         """Close the HTTP session."""
-        if self._session:
-            self._session.close()
-            self._session = None
+        if self._curl_session:
+            self._curl_session.close()
+            self._curl_session = None
+        self._tls_session = None
 
     def __enter__(self) -> "Funda":
         return self
@@ -142,26 +291,19 @@ class Funda:
 
         # Try tinyId endpoint first (8-9 digits), then globalId (7 digits)
         listing_id_str = str(listing_id)
-        host = "listing-detail-page.funda.io"
         if len(listing_id_str) >= 8:
             url = API_LISTING_TINY.format(tiny_id=listing_id_str)
         else:
             url = API_LISTING.format(listing_id=listing_id_str)
 
-        headers = _make_headers(host)
-        response = self.session.get(
-            url, headers=headers, ja3=FUNDA_JA3,
-            http_version=CurlHttpVersion.V1_1, timeout=self.timeout
-        )
+        headers = _make_headers()
+        response = self._get(url, headers)
 
         # If tinyId fails, try as globalId
         if response.status_code == 404 and len(listing_id_str) >= 8:
             url = API_LISTING.format(listing_id=listing_id_str)
-            headers = _make_headers(host)
-            response = self.session.get(
-                url, headers=headers, ja3=FUNDA_JA3,
-                http_version=CurlHttpVersion.V1_1, timeout=self.timeout
-            )
+            headers = _make_headers()
+            response = self._get(url, headers)
 
         if response.status_code != 200:
             raise LookupError(f"Listing {listing_id} not found")
@@ -299,17 +441,9 @@ class Funda:
         query = f"{index_line}\n{query_line}\n"
 
         # Retry on intermittent 400 errors from API
-        host = "listing-search-wonen.funda.io"
         for attempt in range(3):
-            headers = _make_headers(host, for_search=True)
-            response = self.session.post(
-                API_SEARCH,
-                headers=headers,
-                data=query,
-                ja3=FUNDA_JA3,
-                http_version=CurlHttpVersion.V1_1,
-                timeout=self.timeout,
-            )
+            headers = _make_headers(for_search=True)
+            response = self._post(API_SEARCH, headers, data=query, for_search=True)
             if response.status_code == 200:
                 break
             if response.status_code == 400 and attempt < 2:
@@ -502,16 +636,12 @@ class Funda:
         """
         consecutive_404s = 0
         current_id = since_id + 1
-        host = "listing-detail-page.funda.io"
 
         while consecutive_404s < max_consecutive_404s:
             url = API_LISTING.format(listing_id=current_id)
             try:
-                headers = _make_headers(host)
-                response = self.session.get(
-                    url, headers=headers, ja3=FUNDA_JA3,
-                    http_version=CurlHttpVersion.V1_1, timeout=self.timeout
-                )
+                headers = _make_headers()
+                response = self._get(url, headers)
 
                 if response.status_code == 200:
                     consecutive_404s = 0
@@ -580,13 +710,11 @@ class Funda:
             "zipcode": postcode,
         }
 
-        response = self.session.post(
-            API_WALTER,
-            json=payload,
-            headers={"Accept": "application/json", "Content-Type": "application/json"},
-            timeout=self.timeout,
-            http_version=CurlHttpVersion.V1_1,
-        )
+        walter_headers = [
+            ("Accept", "application/json"),
+            ("Content-Type", "application/json"),
+        ]
+        response = self._post(API_WALTER, walter_headers, json_data=payload)
 
         if response.status_code != 200:
             raise LookupError(f"Could not fetch price history (status {response.status_code})")

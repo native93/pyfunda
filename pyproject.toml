@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pyfunda"
-version = "2.2.1"
+version = "2.3.0"
 description = "Python API for Funda.nl real estate listings"
 readme = "README.md"
 license = "AGPL-3.0-or-later"
@@ -24,6 +24,8 @@ classifiers = [
 ]
 dependencies = [
     "curl-cffi>=0.14.0",
+    "tls-client>=1.0.1",
+    "typing_extensions>=4.0.0",
 ]
 
 [project.urls]
