@@ -771,23 +771,42 @@ class Funda:
                 price = price_data.get("selling_price", [None])[0]
                 if not price:
                     price = price_data.get("rent_price", [None])[0] if price_data.get("rent_price") else None
+                price_condition = price_data.get("selling_price_condition") or price_data.get("rent_price_condition")
             else:
                 price = price_data
+                price_condition = None
+
+            offering_types = source.get("offering_type", [])
+            offering_type = offering_types[0] if offering_types else None
+
+            agents = source.get("agent", [])
+            agent = agents[0] if agents else {}
 
             listing_data = {
                 "global_id": int(hit.get("_id", 0)),
                 "title": f"{address.get('street_name', '')} {address.get('house_number', '')}".strip(),
+                "street_name": address.get("street_name"),
+                "house_number": address.get("house_number"),
+                "house_number_suffix": address.get("house_number_suffix"),
                 "city": address.get("city"),
                 "postcode": address.get("postal_code"),
                 "province": address.get("province"),
                 "neighbourhood": address.get("neighbourhood"),
                 "price": price,
+                "price_condition": price_condition,
                 "living_area": source.get("floor_area", [None])[0] if source.get("floor_area") else None,
                 "plot_area": source.get("plot_area_range", {}).get("gte"),
                 "bedrooms": source.get("number_of_bedrooms"),
+                "rooms": source.get("number_of_rooms"),
                 "energy_label": source.get("energy_label"),
                 "object_type": source.get("object_type"),
+                "offering_type": offering_type,
                 "construction_type": source.get("construction_type"),
+                "publish_date": source.get("publish_date"),
+                "detail_url": source.get("object_detail_page_relative_url"),
+                "broker_id": agent.get("id"),
+                "broker_name": agent.get("name"),
+                "broker_association": agent.get("association"),
                 "photos": source.get("thumbnail_id", [])[:5],
             }
 
