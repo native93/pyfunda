@@ -1,0 +1,13 @@
+FROM ghcr.io/astral-sh/uv:0.6.6-python3.12-bookworm-slim
+
+WORKDIR /app
+
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-install-project --no-cache
+
+COPY . .
+RUN uv sync --frozen --no-cache
+
+ENV PATH="/app/.venv/bin:$PATH"
+
+CMD ["bash"]
