@@ -2,6 +2,8 @@
 
 Visualize how much buyers are paying above asking price across Dutch cities.
 
+![Overbidding Heatmap](screenshot.png)
+
 ## Setup (5 steps)
 
 ### Step 1: Install dependencies
