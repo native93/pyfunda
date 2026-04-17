@@ -33,5 +33,11 @@ htmlcov/
 Thumbs.db
 
 # Project specific
-*.json
 uv.lock
+
+# Webapp data files
+webapp/overbid_data.json
+webapp/coords_cache.json
+
+# Secrets - NEVER commit
+webapp/secrets.json

@@ -1,0 +1,18 @@
+{
+  "target_cities": [
+    "amsterdam",
+    "utrecht",
+    "almere",
+    "zaandam",
+    "rotterdam"
+  ],
+  "collection": {
+    "max_pages_per_city": 30,
+    "rate_limit_pause_every": 50,
+    "rate_limit_pause_seconds": 60
+  },
+  "krib_api": {
+    "endpoint": "https://krib.nl/api/v1/funda-listing-meta-data",
+    "timeout_seconds": 15
+  }
+}

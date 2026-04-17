@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Funda Apartment Analyzer</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1800px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        .search-box {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .search-box input, .search-box select, .search-box button {
+            padding: 10px 15px;
+            font-size: 16px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-right: 10px;
+        }
+        .search-box input {
+            width: 300px;
+        }
+        .search-box button {
+            background: #f57c00;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        .search-box button:hover {
+            background: #e65100;
+        }
+        .search-box button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .results-count {
+            margin: 20px 0;
+            color: #666;
+        }
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            font-size: 13px;
+        }
+        th, td {
+            padding: 10px 8px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+        th {
+            background: #333;
+            color: white;
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+            white-space: nowrap;
+        }
+        tr:hover {
+            background: #f9f9f9;
+        }
+        tr.available {
+            background: #e8f5e9;
+        }
+        tr.available:hover {
+            background: #c8e6c9;
+        }
+        .status-sold {
+            color: #d32f2f;
+            font-weight: bold;
+        }
+        .status-available {
+            color: #388e3c;
+            font-weight: bold;
+        }
+        .price {
+            font-weight: bold;
+            white-space: nowrap;
+        }
+        .overbid-positive {
+            color: #d32f2f;
+        }
+        .overbid-negative {
+            color: #388e3c;
+        }
+        .condition-old {
+            background: #ffcdd2;
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+        .condition-renovated {
+            background: #c8e6c9;
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+        .editable {
+            cursor: pointer;
+            min-width: 80px;
+        }
+        .editable:hover {
+            background: #fff3e0;
+        }
+        .editable select {
+            width: 100%;
+            padding: 4px;
+            font-size: 12px;
+        }
+        a {
+            color: #1976d2;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+        .open-btn {
+            background: #1976d2;
+            color: white;
+            border: none;
+            padding: 4px 8px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 11px;
+        }
+        .open-btn:hover {
+            background: #1565c0;
+        }
+        .summary {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-top: 20px;
+        }
+        .summary h3 {
+            margin-bottom: 15px;
+        }
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+        .summary-item {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 4px;
+        }
+        .summary-item label {
+            display: block;
+            color: #666;
+            font-size: 12px;
+            margin-bottom: 5px;
+        }
+        .summary-item .value {
+            font-size: 20px;
+            font-weight: bold;
+            color: #333;
+        }
+        .table-container {
+            overflow-x: auto;
+        }
+        input.editable-input {
+            width: 100px;
+            padding: 4px;
+            font-size: 12px;
+            border: 1px solid #ddd;
+            border-radius: 3px;
+        }
+        .log-panel {
+            background: #1e1e1e;
+            color: #00ff00;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 12px;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            max-height: 200px;
+            overflow-y: auto;
+            display: none;
+        }
+        .log-panel.visible {
+            display: block;
+        }
+        .log-entry {
+            margin: 2px 0;
+            padding: 2px 0;
+            border-bottom: 1px solid #333;
+        }
+        .log-entry.error {
+            color: #ff6b6b;
+        }
+        .log-entry.success {
+            color: #69db7c;
+        }
+        .log-entry.info {
+            color: #74c0fc;
+        }
+        .log-time {
+            color: #888;
+            margin-right: 10px;
+        }
+        .progress-bar {
+            background: #333;
+            border-radius: 4px;
+            height: 20px;
+            margin: 10px 0;
+            overflow: hidden;
+        }
+        .progress-fill {
+            background: linear-gradient(90deg, #f57c00, #ff9800);
+            height: 100%;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        .progress-text {
+            text-align: center;
+            margin-top: 5px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Funda Apartment Analyzer</h1>
+
+        <div class="search-box">
+            <input type="text" id="location" placeholder="Postcode or street (e.g., 3555ES or Burgemeester Norbruislaan)" />
+            <select id="radius">
+                <option value="1">1 km</option>
+                <option value="2" selected>2 km</option>
+                <option value="5">5 km</option>
+                <option value="10">10 km</option>
+            </select>
+            <button id="searchBtn" onclick="search()">Search</button>
+            <button onclick="exportCSV()">Export CSV</button>
+            <button onclick="clearLogs()" style="background: #666;">Clear Logs</button>
+        </div>
+
+        <div id="logPanel" class="log-panel">
+            <div id="logContent"></div>
+        </div>
+
+        <div id="progressContainer" style="display: none;">
+            <div class="progress-bar">
+                <div id="progressFill" class="progress-fill"></div>
+            </div>
+            <div id="progressText" class="progress-text">Loading...</div>
+        </div>
+
+        <div id="loading" class="loading" style="display: none;">
+            Searching... This may take a moment.
+        </div>
+
+        <div id="resultsCount" class="results-count"></div>
+
+        <div class="table-container">
+            <table id="resultsTable" style="display: none;">
+                <thead>
+                    <tr>
+                        <th>Address</th>
+                        <th>Status</th>
+                        <th>Asking Price</th>
+                        <th>Actual Sale</th>
+                        <th>Overbid %</th>
+                        <th>WOZ 2025</th>
+                        <th>m²</th>
+                        <th>€/m²</th>
+                        <th>Beds</th>
+                        <th>Year</th>
+                        <th>Energy</th>
+                        <th>Floor</th>
+                        <th>Lift</th>
+                        <th>Balcony</th>
+                        <th>Facing</th>
+                        <th>Bathroom</th>
+                        <th>Toilet</th>
+                        <th>Kitchen</th>
+                        <th>Cooktop</th>
+                        <th>CV-Ketel</th>
+                        <th>VvE</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="resultsBody">
+                </tbody>
+            </table>
+        </div>
+
+        <div id="summary" class="summary" style="display: none;">
+            <h3>Summary Statistics</h3>
+            <div class="summary-grid">
+                <div class="summary-item">
+                    <label>Total Apartments</label>
+                    <div class="value" id="totalCount">0</div>
+                </div>
+                <div class="summary-item">
+                    <label>Avg Asking Price</label>
+                    <div class="value" id="avgPrice">€0</div>
+                </div>
+                <div class="summary-item">
+                    <label>Avg €/m²</label>
+                    <div class="value" id="avgPriceM2">€0</div>
+                </div>
+                <div class="summary-item">
+                    <label>Avg Overbid %</label>
+                    <div class="value" id="avgOverbid">0%</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let apartmentData = {};
+
+        function log(message, type = 'info') {
+            const logPanel = document.getElementById('logPanel');
+            const logContent = document.getElementById('logContent');
+            logPanel.classList.add('visible');
+
+            const time = new Date().toLocaleTimeString();
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.innerHTML = `<span class="log-time">[${time}]</span>${message}`;
+            logContent.appendChild(entry);
+
+            // Auto-scroll to bottom
+            logPanel.scrollTop = logPanel.scrollHeight;
+        }
+
+        function clearLogs() {
+            document.getElementById('logContent').innerHTML = '';
+            document.getElementById('logPanel').classList.remove('visible');
+        }
+
+        function updateProgress(current, total, message) {
+            const container = document.getElementById('progressContainer');
+            const fill = document.getElementById('progressFill');
+            const text = document.getElementById('progressText');
+
+            container.style.display = 'block';
+            const percent = Math.round((current / total) * 100);
+            fill.style.width = percent + '%';
+            text.textContent = `${message} (${current}/${total} - ${percent}%)`;
+        }
+
+        function hideProgress() {
+            document.getElementById('progressContainer').style.display = 'none';
+        }
+
+        async function search() {
+            const location = document.getElementById('location').value.trim();
+            const radius = document.getElementById('radius').value;
+
+            if (!location) {
+                alert('Please enter a location');
+                return;
+            }
+
+            clearLogs();
+            log(`Starting search for "${location}" within ${radius} km...`, 'info');
+
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('resultsTable').style.display = 'none';
+            document.getElementById('summary').style.display = 'none';
+            document.getElementById('searchBtn').disabled = true;
+
+            try {
+                log('Fetching apartment list from Funda API...', 'info');
+                const response = await fetch('/search', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ location, radius })
+                });
+
+                const data = await response.json();
+
+                if (data.error) {
+                    log(`Error: ${data.error}`, 'error');
+                    alert('Error: ' + data.error);
+                    return;
+                }
+
+                log(`Found ${data.count} apartments in search results`, 'success');
+                document.getElementById('resultsCount').textContent =
+                    `Found ${data.count} apartments. Loading details...`;
+
+                // Load details for each
+                apartmentData = {};
+                const tbody = document.getElementById('resultsBody');
+                tbody.innerHTML = '';
+
+                const total = data.results.length;
+                let loaded = 0;
+                let errors = 0;
+
+                for (const result of data.results) {
+                    try {
+                        log(`Loading: ${result.title} (${result.postcode})...`, 'info');
+                        updateProgress(loaded + 1, total, `Loading ${result.title}`);
+
+                        const detailResponse = await fetch(`/details/${result.global_id}`);
+                        const detail = await detailResponse.json();
+
+                        if (!detail.error) {
+                            apartmentData[result.global_id] = detail;
+                            addRow(detail);
+                            loaded++;
+                            log(`✓ Loaded: ${detail.title} - ${detail.price_formatted} - ${detail.living_area}m²`, 'success');
+                        } else {
+                            errors++;
+                            log(`✗ Failed to load ${result.title}: ${detail.error}`, 'error');
+                        }
+                    } catch (e) {
+                        errors++;
+                        log(`✗ Error loading ${result.title}: ${e.message}`, 'error');
+                        console.error('Error loading details for', result.global_id, e);
+                    }
+                }
+
+                hideProgress();
+                document.getElementById('resultsTable').style.display = 'table';
+                document.getElementById('summary').style.display = 'block';
+                document.getElementById('resultsCount').textContent =
+                    `Found ${Object.keys(apartmentData).length} apartments`;
+
+                log(`\n=== COMPLETE ===`, 'success');
+                log(`Total loaded: ${loaded} | Errors: ${errors}`, loaded > 0 ? 'success' : 'error');
+
+                updateSummary();
+
+            } catch (e) {
+                log(`Search failed: ${e.message}`, 'error');
+                alert('Search failed: ' + e.message);
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('searchBtn').disabled = false;
+                hideProgress();
+            }
+        }
+
+        function addRow(apt) {
+            const tbody = document.getElementById('resultsBody');
+            const tr = document.createElement('tr');
+            tr.id = `row-${apt.global_id}`;
+            tr.className = apt.status === 'available' ? 'available' : '';
+
+            const overbid = apt.actual_sale_price && apt.price
+                ? ((apt.actual_sale_price - apt.price) / apt.price * 100).toFixed(1)
+                : '';
+            const overbidClass = overbid > 0 ? 'overbid-positive' : (overbid < 0 ? 'overbid-negative' : '');
+
+            // Extract CV year from string
+            const cvMatch = apt.cv_ketel ? apt.cv_ketel.match(/(\d{4})/) : null;
+            const cvYear = cvMatch ? cvMatch[1] : '-';
+
+            tr.innerHTML = `
+                <td>
+                    <a href="${apt.url}" target="_blank">${apt.title}</a><br>
+                    <small>${apt.postcode}</small>
+                </td>
+                <td class="${apt.status === 'available' ? 'status-available' : 'status-sold'}">
+                    ${apt.status === 'available' ? 'CURRENT' : 'SOLD'}
+                </td>
+                <td class="price">${apt.price_formatted || '-'}</td>
+                <td class="editable" onclick="editSalePrice(${apt.global_id})">
+                    <span id="sale-${apt.global_id}">${apt.actual_sale_price ? '€' + apt.actual_sale_price.toLocaleString() : '-'}</span>
+                </td>
+                <td class="${overbidClass}">${overbid ? overbid + '%' : '-'}</td>
+                <td>${apt.woz_2025_fmt || '-'}</td>
+                <td>${apt.living_area || '-'}</td>
+                <td>€${apt.price_m2 ? apt.price_m2.toLocaleString() : '-'}</td>
+                <td>${apt.bedrooms || '-'}</td>
+                <td>${apt.construction_year || '-'}</td>
+                <td>${apt.energy_label || '-'}</td>
+                <td>${apt.floor || '-'}</td>
+                <td>${apt.has_lift ? 'Yes' : 'No'}</td>
+                <td>${apt.has_balcony ? 'Yes' : 'No'}</td>
+                <td>${apt.balcony_facing || '-'}</td>
+                <td class="editable" onclick="editCondition(${apt.global_id}, 'bathroom')">
+                    <span id="bath-${apt.global_id}" class="${getConditionClass(apt.bathroom_condition)}">${apt.bathroom_condition || 'Click to set'}</span>
+                </td>
+                <td class="editable" onclick="editCondition(${apt.global_id}, 'toilet')">
+                    <span id="toilet-${apt.global_id}" class="${getConditionClass(apt.toilet_condition)}">${apt.toilet_condition || 'Click to set'}</span>
+                </td>
+                <td class="editable" onclick="editCondition(${apt.global_id}, 'kitchen')">
+                    <span id="kitchen-${apt.global_id}" class="${getConditionClass(apt.kitchen_condition)}">${apt.kitchen_condition || 'Click to set'}</span>
+                </td>
+                <td class="editable" onclick="editCooktop(${apt.global_id})">
+                    <span id="cooktop-${apt.global_id}">${apt.cooktop_type || 'Click to set'}</span>
+                </td>
+                <td>${cvYear}</td>
+                <td>${apt.vve || '-'}</td>
+                <td>
+                    <button class="open-btn" onclick="openInChrome(${apt.global_id})">Open</button>
+                </td>
+            `;
+
+            tbody.appendChild(tr);
+        }
+
+        function getConditionClass(condition) {
+            if (!condition) return '';
+            return condition.toLowerCase().includes('old') ? 'condition-old' :
+                   condition.toLowerCase().includes('reno') ? 'condition-renovated' : '';
+        }
+
+        function editCondition(id, field) {
+            const span = document.getElementById(`${field === 'bathroom' ? 'bath' : field}-${id}`);
+            const currentValue = apartmentData[id][`${field}_condition`] || '';
+
+            span.innerHTML = `
+                <select onchange="saveCondition(${id}, '${field}', this.value)">
+                    <option value="">Select...</option>
+                    <option value="Old" ${currentValue === 'Old' ? 'selected' : ''}>Old</option>
+                    <option value="Renovated" ${currentValue === 'Renovated' ? 'selected' : ''}>Renovated</option>
+                    <option value="Renovated (classy)" ${currentValue === 'Renovated (classy)' ? 'selected' : ''}>Renovated (classy)</option>
+                </select>
+            `;
+        }
+
+        function saveCondition(id, field, value) {
+            apartmentData[id][`${field}_condition`] = value;
+            const spanId = field === 'bathroom' ? 'bath' : field;
+            document.getElementById(`${spanId}-${id}`).innerHTML =
+                `<span class="${getConditionClass(value)}">${value || 'Click to set'}</span>`;
+            updateSummary();
+        }
+
+        function editCooktop(id) {
+            const span = document.getElementById(`cooktop-${id}`);
+            const currentValue = apartmentData[id].cooktop_type || '';
+
+            span.innerHTML = `
+                <select onchange="saveCooktop(${id}, this.value)">
+                    <option value="">Select...</option>
+                    <option value="Gas" ${currentValue === 'Gas' ? 'selected' : ''}>Gas</option>
+                    <option value="Induction" ${currentValue === 'Induction' ? 'selected' : ''}>Induction</option>
+                </select>
+            `;
+        }
+
+        function saveCooktop(id, value) {
+            apartmentData[id].cooktop_type = value;
+            document.getElementById(`cooktop-${id}`).textContent = value || 'Click to set';
+        }
+
+        function editSalePrice(id) {
+            const span = document.getElementById(`sale-${id}`);
+            const currentValue = apartmentData[id].actual_sale_price || '';
+
+            span.innerHTML = `
+                <input type="number" class="editable-input" value="${currentValue}"
+                       onblur="saveSalePrice(${id}, this.value)"
+                       onkeypress="if(event.key==='Enter') saveSalePrice(${id}, this.value)">
+            `;
+            span.querySelector('input').focus();
+        }
+
+        function saveSalePrice(id, value) {
+            const price = parseInt(value) || null;
+            apartmentData[id].actual_sale_price = price;
+            document.getElementById(`sale-${id}`).textContent = price ? '€' + price.toLocaleString() : '-';
+
+            // Update overbid
+            const row = document.getElementById(`row-${id}`);
+            const apt = apartmentData[id];
+            if (price && apt.price) {
+                const overbid = ((price - apt.price) / apt.price * 100).toFixed(1);
+                const overbidCell = row.cells[4];
+                overbidCell.textContent = overbid + '%';
+                overbidCell.className = overbid > 0 ? 'overbid-positive' : (overbid < 0 ? 'overbid-negative' : '');
+            }
+
+            updateSummary();
+        }
+
+        function openInChrome(id) {
+            const apt = apartmentData[id];
+            if (apt && apt.url) {
+                window.open(apt.url, '_blank');
+            }
+        }
+
+        function updateSummary() {
+            const apts = Object.values(apartmentData);
+
+            document.getElementById('totalCount').textContent = apts.length;
+
+            const prices = apts.filter(a => a.price).map(a => a.price);
+            const avgPrice = prices.length ? Math.round(prices.reduce((a, b) => a + b, 0) / prices.length) : 0;
+            document.getElementById('avgPrice').textContent = '€' + avgPrice.toLocaleString();
+
+            const priceM2s = apts.filter(a => a.price_m2).map(a => a.price_m2);
+            const avgPriceM2 = priceM2s.length ? Math.round(priceM2s.reduce((a, b) => a + b, 0) / priceM2s.length) : 0;
+            document.getElementById('avgPriceM2').textContent = '€' + avgPriceM2.toLocaleString();
+
+            const overbids = apts.filter(a => a.actual_sale_price && a.price)
+                .map(a => (a.actual_sale_price - a.price) / a.price * 100);
+            const avgOverbid = overbids.length ? (overbids.reduce((a, b) => a + b, 0) / overbids.length).toFixed(1) : 0;
+            document.getElementById('avgOverbid').textContent = avgOverbid + '%';
+        }
+
+        function exportCSV() {
+            const apts = Object.values(apartmentData);
+            if (!apts.length) {
+                alert('No data to export');
+                return;
+            }
+
+            const headers = [
+                'Address', 'Postcode', 'Status', 'Asking Price', 'Actual Sale', 'Overbid %',
+                'WOZ 2025', 'm²', '€/m²', 'Bedrooms', 'Year', 'Energy', 'Floor', 'Lift',
+                'Balcony', 'Facing', 'Bathroom', 'Toilet', 'Kitchen', 'Cooktop', 'VvE', 'URL'
+            ];
+
+            const rows = apts.map(a => {
+                const overbid = a.actual_sale_price && a.price
+                    ? ((a.actual_sale_price - a.price) / a.price * 100).toFixed(1) + '%'
+                    : '';
+                return [
+                    a.title, a.postcode, a.status, a.price, a.actual_sale_price || '',
+                    overbid, a.woz_2025 || '', a.living_area, a.price_m2, a.bedrooms,
+                    a.construction_year, a.energy_label, a.floor, a.has_lift ? 'Yes' : 'No',
+                    a.has_balcony ? 'Yes' : 'No', a.balcony_facing, a.bathroom_condition,
+                    a.toilet_condition, a.kitchen_condition, a.cooktop_type, a.vve, a.url
+                ];
+            });
+
+            const csv = [headers, ...rows].map(row => row.map(cell =>
+                typeof cell === 'string' && (cell.includes(',') || cell.includes('"'))
+                    ? `"${cell.replace(/"/g, '""')}"`
+                    : cell
+            ).join(',')).join('\n');
+
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'funda_analysis.csv';
+            a.click();
+        }
+
+        // Handle enter key in search box
+        document.getElementById('location').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') search();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dutch Real Estate Overbidding Heatmap</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        #map {
+            height: calc(100vh - 110px);
+            width: 100%;
+        }
+
+        .header {
+            background: #2c3e50;
+            color: white;
+            padding: 15px 20px;
+        }
+
+        .header-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+
+        .header h1 {
+            font-size: 1.4rem;
+            font-weight: 500;
+            margin: 0;
+        }
+
+        .year-tabs {
+            display: flex;
+            gap: 5px;
+        }
+
+        .year-tab {
+            padding: 6px 16px;
+            border: none;
+            border-radius: 4px;
+            background: #34495e;
+            color: white;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: background 0.2s;
+        }
+
+        .year-tab:hover {
+            background: #4a6278;
+        }
+
+        .year-tab.active {
+            background: #3498db;
+        }
+
+        .filters-row {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .filter-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(255,255,255,0.1);
+            padding: 6px 12px;
+            border-radius: 4px;
+        }
+
+        .filter-group label {
+            font-size: 0.8rem;
+            color: #bdc3c7;
+            white-space: nowrap;
+        }
+
+        .filter-group select,
+        .filter-group input {
+            padding: 4px 8px;
+            border: none;
+            border-radius: 3px;
+            font-size: 0.85rem;
+            background: white;
+        }
+
+        .filter-group input {
+            width: 70px;
+        }
+
+        .filter-group select {
+            min-width: 100px;
+        }
+
+        .stats-badge {
+            background: #3498db;
+            padding: 6px 14px;
+            border-radius: 4px;
+            font-size: 0.9rem;
+        }
+
+        .stats-badge span {
+            font-weight: bold;
+        }
+
+        .stats {
+            position: absolute;
+            bottom: 30px;
+            left: 20px;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            z-index: 1000;
+            font-size: 0.9rem;
+        }
+
+        .stats h3 {
+            margin-bottom: 10px;
+            font-size: 1rem;
+        }
+
+        .stats-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 5px 0;
+        }
+
+        .legend {
+            position: absolute;
+            bottom: 30px;
+            right: 20px;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            z-index: 1000;
+        }
+
+        .legend h4 {
+            margin-bottom: 10px;
+            font-size: 0.9rem;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 5px 0;
+            font-size: 0.85rem;
+        }
+
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            border: 2px solid rgba(0,0,0,0.2);
+        }
+
+        .popup-content {
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+
+        .popup-content strong {
+            font-size: 1rem;
+        }
+
+        .popup-content .overbid {
+            font-size: 1.2rem;
+            font-weight: bold;
+            margin: 8px 0;
+        }
+
+        .popup-content .overbid.positive { color: #e74c3c; }
+        .popup-content .overbid.negative { color: #27ae60; }
+
+        .popup-content .details {
+            color: #7f8c8d;
+            font-size: 0.85rem;
+        }
+
+        .popup-content a {
+            color: #3498db;
+            text-decoration: none;
+        }
+
+        .popup-content a:hover {
+            text-decoration: underline;
+        }
+
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 20px rgba(0,0,0,0.3);
+            z-index: 2000;
+            text-align: center;
+        }
+
+        .loading.hidden { display: none; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-top">
+            <h1>Dutch Real Estate Overbidding Heatmap</h1>
+            <div class="year-tabs">
+                <button class="year-tab active" data-year="all">All Years</button>
+                <button class="year-tab" data-year="2025">2025</button>
+                <button class="year-tab" data-year="2026">2026</button>
+            </div>
+        </div>
+        <div class="filters-row">
+            <div class="filter-group">
+                <label>City</label>
+                <select id="cityFilter">
+                    <option value="">All</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>Overbid %</label>
+                <input type="number" id="minOverbid" placeholder="Min">
+                <span style="color:#7f8c8d">–</span>
+                <input type="number" id="maxOverbid" placeholder="Max">
+            </div>
+            <div class="filter-group">
+                <label>Sale Price €</label>
+                <input type="number" id="minPrice" placeholder="Min">
+                <span style="color:#7f8c8d">–</span>
+                <input type="number" id="maxPrice" placeholder="Max">
+            </div>
+            <div class="stats-badge">
+                <span id="transactionCount">0</span> transactions
+            </div>
+        </div>
+    </div>
+
+    <div id="map"></div>
+
+    <div class="loading" id="loading">
+        <div>Loading data...</div>
+    </div>
+
+    <div class="stats" id="stats">
+        <h3>Statistics</h3>
+        <div class="stats-row">
+            <span>Average Overbid:</span>
+            <span id="avgOverbid">-</span>
+        </div>
+        <div class="stats-row">
+            <span>Median Overbid:</span>
+            <span id="medianOverbid">-</span>
+        </div>
+        <div class="stats-row">
+            <span>Min / Max:</span>
+            <span id="minMaxOverbid">-</span>
+        </div>
+    </div>
+
+    <div class="legend">
+        <h4>Overbid %</h4>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #27ae60;"></div>
+            <span>&lt; 5% (Buyer-friendly)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #f1c40f;"></div>
+            <span>5-10% (Moderate)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #e67e22;"></div>
+            <span>10-15% (Competitive)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #e74c3c;"></div>
+            <span>&gt; 15% (Very Competitive)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #9b59b6;"></div>
+            <span>Underbid (Below asking)</span>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // Initialize map centered on Netherlands
+        const map = L.map('map').setView([52.3, 4.9], 10);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map);
+
+        let allData = [];
+        let markers = L.layerGroup().addTo(map);
+        let selectedYear = 'all';  // Current year filter
+
+        // Color function based on overbid percentage
+        function getColor(overbidPct) {
+            if (overbidPct < 0) return '#9b59b6';  // Purple - underbid
+            if (overbidPct < 5) return '#27ae60';  // Green
+            if (overbidPct < 10) return '#f1c40f'; // Yellow
+            if (overbidPct < 15) return '#e67e22'; // Orange
+            return '#e74c3c';                       // Red
+        }
+
+        // Format currency
+        function formatPrice(price) {
+            return '€' + price.toLocaleString('nl-NL');
+        }
+
+        // Create popup content
+        function createPopup(tx) {
+            const overbidClass = tx.overbid_pct >= 0 ? 'positive' : 'negative';
+            const overbidSign = tx.overbid_pct >= 0 ? '+' : '';
+
+            return `
+                <div class="popup-content">
+                    <strong>${tx.address}</strong><br>
+                    ${tx.postal_code} ${tx.city}
+                    <div class="overbid ${overbidClass}">
+                        ${overbidSign}${tx.overbid_pct.toFixed(1)}% overbid
+                    </div>
+                    <div class="details">
+                        Asked: ${formatPrice(tx.asking_price)}<br>
+                        Sold: ${formatPrice(tx.sale_price)}<br>
+                        Date: ${tx.transaction_date}<br>
+                        ${tx.living_area_m2 ? `Area: ${tx.living_area_m2} m²<br>` : ''}
+                        ${tx.energy_label ? `Energy: ${tx.energy_label}<br>` : ''}
+                    </div>
+                    <a href="${tx.funda_url}" target="_blank">View on Funda →</a>
+                </div>
+            `;
+        }
+
+        // Apply filters and update map
+        function updateMap() {
+            const cityFilter = document.getElementById('cityFilter').value;
+            const minOverbid = parseFloat(document.getElementById('minOverbid').value) || -100;
+            const maxOverbid = parseFloat(document.getElementById('maxOverbid').value) || 100;
+            const minPrice = parseFloat(document.getElementById('minPrice').value) || 0;
+            const maxPrice = parseFloat(document.getElementById('maxPrice').value) || Infinity;
+
+            markers.clearLayers();
+
+            const filtered = allData.filter(tx => {
+                // Year filter
+                if (selectedYear !== 'all') {
+                    const txYear = tx.transaction_date ? tx.transaction_date.substring(0, 4) : '';
+                    if (txYear !== selectedYear) return false;
+                }
+                if (cityFilter && tx.city !== cityFilter) return false;
+                if (tx.overbid_pct < minOverbid) return false;
+                if (tx.overbid_pct > maxOverbid) return false;
+                // Price filter (using sale_price)
+                if (tx.sale_price < minPrice) return false;
+                if (tx.sale_price > maxPrice) return false;
+                return true;
+            });
+
+            filtered.forEach(tx => {
+                const marker = L.circleMarker([tx.lat, tx.lng], {
+                    radius: 8,
+                    fillColor: getColor(tx.overbid_pct),
+                    color: '#fff',
+                    weight: 2,
+                    opacity: 1,
+                    fillOpacity: 0.8
+                });
+
+                marker.bindPopup(createPopup(tx));
+                markers.addLayer(marker);
+            });
+
+            // Update stats
+            document.getElementById('transactionCount').textContent = filtered.length;
+            updateStats(filtered);
+
+            // Fit map to markers if we have data
+            if (filtered.length > 0 && markers.getLayers().length > 0) {
+                const group = new L.featureGroup(markers.getLayers());
+                map.fitBounds(group.getBounds(), { padding: [50, 50] });
+            }
+        }
+
+        // Update statistics display
+        function updateStats(data) {
+            if (data.length === 0) {
+                document.getElementById('avgOverbid').textContent = '-';
+                document.getElementById('medianOverbid').textContent = '-';
+                document.getElementById('minMaxOverbid').textContent = '-';
+                return;
+            }
+
+            const overbids = data.map(tx => tx.overbid_pct).sort((a, b) => a - b);
+            const avg = overbids.reduce((a, b) => a + b, 0) / overbids.length;
+            const median = overbids[Math.floor(overbids.length / 2)];
+            const min = overbids[0];
+            const max = overbids[overbids.length - 1];
+
+            document.getElementById('avgOverbid').textContent = avg.toFixed(1) + '%';
+            document.getElementById('medianOverbid').textContent = median.toFixed(1) + '%';
+            document.getElementById('minMaxOverbid').textContent = `${min.toFixed(1)}% / ${max.toFixed(1)}%`;
+        }
+
+        // Populate city filter dropdown
+        function populateCityFilter(data) {
+            const cities = [...new Set(data.map(tx => tx.city))].sort();
+            const select = document.getElementById('cityFilter');
+
+            cities.forEach(city => {
+                const option = document.createElement('option');
+                option.value = city;
+                option.textContent = city;
+                select.appendChild(option);
+            });
+        }
+
+        // Load data from API
+        async function loadData() {
+            try {
+                console.log('Fetching data from /api/overbid-data...');
+                const response = await fetch('/api/overbid-data');
+                console.log('Response status:', response.status);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                console.log('Data received:', data);
+
+                if (data.error) {
+                    console.error('API error:', data.error);
+                    alert('Error loading data: ' + data.error);
+                    return;
+                }
+
+                allData = data.transactions || [];
+                console.log('Transactions loaded:', allData.length);
+
+                if (allData.length === 0) {
+                    alert('No transactions found. Run collect_overbid_data.py to collect data.');
+                    return;
+                }
+
+                populateCityFilter(allData);
+                updateMap();
+
+            } catch (error) {
+                console.error('Error loading data:', error);
+                alert('Failed to load overbid data: ' + error.message + '\n\nCheck the browser console for details.');
+            } finally {
+                document.getElementById('loading').classList.add('hidden');
+            }
+        }
+
+        // Event listeners
+        document.getElementById('cityFilter').addEventListener('change', updateMap);
+        document.getElementById('minOverbid').addEventListener('input', updateMap);
+        document.getElementById('maxOverbid').addEventListener('input', updateMap);
+        document.getElementById('minPrice').addEventListener('input', updateMap);
+        document.getElementById('maxPrice').addEventListener('input', updateMap);
+
+        // Year tab click handlers
+        document.querySelectorAll('.year-tab').forEach(tab => {
+            tab.addEventListener('click', function() {
+                // Update active state
+                document.querySelectorAll('.year-tab').forEach(t => t.classList.remove('active'));
+                this.classList.add('active');
+
+                // Set year filter and update map
+                selectedYear = this.dataset.year;
+                updateMap();
+            });
+        });
+
+        // Load data on page load
+        loadData();
+    </script>
+</body>
+</html>
