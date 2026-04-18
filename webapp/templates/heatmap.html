@@ -341,6 +341,7 @@
                         Sold: ${formatPrice(tx.sale_price)}<br>
                         Date: ${tx.transaction_date}<br>
                         ${tx.living_area_m2 ? `Area: ${tx.living_area_m2} m²<br>` : ''}
+                        ${tx.construction_year ? `Built: ${tx.construction_year}<br>` : ''}
                         ${tx.energy_label ? `Energy: ${tx.energy_label}<br>` : ''}
                     </div>
                     <a href="${tx.funda_url}" target="_blank">View on Funda →</a>

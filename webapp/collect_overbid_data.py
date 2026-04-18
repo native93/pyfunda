@@ -110,21 +110,27 @@ def save_coords_cache(cache: dict):
 
 
 def get_coordinates(funda: Funda, listing_id: str, coords_cache: dict) -> tuple:
-    """Get coordinates for a listing, using cache if available."""
+    """Get coordinates and construction year for a listing, using cache if available."""
     if listing_id in coords_cache:
-        return coords_cache[listing_id]
+        cached = coords_cache[listing_id]
+        # Handle old cache format (just lat, lng tuple)
+        if isinstance(cached, tuple) and len(cached) == 2:
+            return (cached[0], cached[1], None)
+        # New cache format: (lat, lng, construction_year)
+        return cached
 
     try:
         listing = funda.get_listing(int(listing_id))
         lat = listing.get('latitude')
         lng = listing.get('longitude')
+        construction_year = listing.get('construction_year')
         if lat and lng:
-            coords_cache[listing_id] = (lat, lng)
-            return (lat, lng)
+            coords_cache[listing_id] = (lat, lng, construction_year)
+            return (lat, lng, construction_year)
     except Exception as e:
         print(f"  Failed to get coords for {listing_id}: {e}")
 
-    return (None, None)
+    return (None, None, None)
 
 
 def load_existing_data() -> dict:
@@ -259,7 +265,7 @@ def collect_data(cities: list = None, max_pages: int = 100, year_filter: int = 2
                         lat, lng = None, None
 
                         if tx_listing_id:
-                            lat, lng = get_coordinates(funda, tx_listing_id, coords_cache)
+                            lat, lng, construction_year = get_coordinates(funda, tx_listing_id, coords_cache)
                             # Reduced delay
                             time.sleep(0.2)
 
@@ -281,6 +287,7 @@ def collect_data(cities: list = None, max_pages: int = 100, year_filter: int = 2
                             'lng': lng,
                             'living_area_m2': tx.get('living_space_m2'),
                             'energy_label': tx.get('energy_label'),
+                            'construction_year': construction_year,
                             'funda_url': funda_url,
                         }
 
